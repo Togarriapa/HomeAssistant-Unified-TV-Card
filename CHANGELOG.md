@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.0
+
+- Added automatic discovery of the backend's per-device `Auto-skip YouTube ads` switch.
+- Added a responsive ad-skip toggle and a manual **Skip ad now** action.
+- Added optional `ad_skip_entity` override and `show_ad_skip` visual-editor setting.
+- Added English and Portuguese ad-control labels and ad diagnostics.
+- Grouped the application dropdown into native TV and Cast application sections.
+- Kept native and Cast versions of the same service distinct while removing duplicate fallback entries.
+- Excluded ADB-only fallback applications that do not expose a guaranteed package-launch route.
+- Removed repeated `Controller` suffixes from the card title.
+- Added inline service-error feedback and cleaned transient timers when the card is removed.
+- Extended container-query responsiveness to the new ad controls.
+
 ## 1.1.0
 
 - Reworked responsiveness around CSS container queries so the card adapts to its actual dashboard column width instead of the browser viewport.
