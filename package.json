@@ -1,0 +1,9 @@
+{
+  "name": "homeassistant-unified-tv-card",
+  "version": "1.0.0",
+  "description": "Unified TV, Cast, app, input and remote control card for Home Assistant",
+  "private": true,
+  "scripts": {
+    "check": "node --check HomeAssistant-Unified-TV-Card.js"
+  }
+}
