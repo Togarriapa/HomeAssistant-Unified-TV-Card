@@ -4,9 +4,9 @@ const CARD_TAG = "unified-tv-card";
 const LABELS = {
   en: {
     unavailable: "Unavailable", app: "Application", selectApp: "Select an app",
-    input: "Input", selectInput: "Select an input", activity: "Activity",
-    selectActivity: "Run an activity", restart: "Restart", power: "Power",
-    home: "Home", back: "Back", mute: "Mute", unmute: "Unmute",
+    noApps: "No applications available", input: "Input", selectInput: "Select an input",
+    activity: "Activity", selectActivity: "Run an activity", restart: "Restart",
+    power: "Power", home: "Home", back: "Back", mute: "Mute", unmute: "Unmute",
     diagnostics: "Diagnostics", source: "Source", state: "State",
     application: "Application", volume: "Volume", health: "Health",
     features: "Supported features", noEntity: "Entity not found",
@@ -14,10 +14,10 @@ const LABELS = {
   },
   pt: {
     unavailable: "Indisponível", app: "Aplicação", selectApp: "Selecionar aplicação",
-    input: "Entrada", selectInput: "Selecionar entrada", activity: "Atividade",
-    selectActivity: "Executar atividade", restart: "Reiniciar", power: "Energia",
-    home: "Início", back: "Voltar", mute: "Silenciar", unmute: "Ativar som",
-    diagnostics: "Diagnóstico", source: "Fonte", state: "Estado",
+    noApps: "Nenhuma aplicação disponível", input: "Entrada", selectInput: "Selecionar entrada",
+    activity: "Atividade", selectActivity: "Executar atividade", restart: "Reiniciar",
+    power: "Energia", home: "Início", back: "Voltar", mute: "Silenciar",
+    unmute: "Ativar som", diagnostics: "Diagnóstico", source: "Fonte", state: "Estado",
     application: "Aplicação", volume: "Volume", health: "Saúde",
     features: "Funcionalidades suportadas", noEntity: "Entidade não encontrada",
     confirmPowerOff: "Desligar este dispositivo?", confirmRestart: "Reiniciar este dispositivo?",
@@ -46,6 +46,7 @@ class UnifiedTvCard extends HTMLElement {
     this._config = undefined;
     this._signature = "";
     this._draggingVolume = false;
+    this._appActions = new Map();
   }
 
   static getConfigForm() {
@@ -106,7 +107,7 @@ class UnifiedTvCard extends HTMLElement {
 
   set hass(hass) { this._hass = hass; this._render(); }
   getCardSize() { return this._config?.show_remote === false ? 7 : 10; }
-  getGridOptions() { return { columns: 12, min_columns: 6, rows: this._config?.show_remote === false ? 7 : 10, min_rows: 5 }; }
+  getGridOptions() { return { columns: 12, min_columns: 4, rows: this._config?.show_remote === false ? 7 : 10, min_rows: 5 }; }
   _language() {
     const language = this._hass?.locale?.language ?? this._hass?.language ?? "en";
     return String(language).toLowerCase().startsWith("pt") ? "pt" : "en";
@@ -120,7 +121,7 @@ class UnifiedTvCard extends HTMLElement {
     return JSON.stringify([
       state.state, attrs.friendly_name, attrs.media_title, attrs.media_artist,
       attrs.app_name, attrs.app_id, attrs.source, attrs.source_list,
-      attrs.favorite_sources, attrs.activity_names, attrs.health,
+      attrs.favorite_sources, attrs.activity_names, attrs.managed_apps, attrs.health,
       attrs.volume_level, attrs.is_volume_muted, attrs.media_position,
       attrs.media_duration, attrs.entity_picture, attrs.supported_features,
       this._config,
@@ -141,8 +142,10 @@ class UnifiedTvCard extends HTMLElement {
     const labels = this._labels();
     const attrs = state.attributes ?? {};
     const sources = Array.isArray(attrs.source_list) ? attrs.source_list.map(String) : [];
-    const apps = sources.filter((source) => sourceKind(source) === "app");
+    const sourceApps = sources.filter((source) => sourceKind(source) === "app");
     const inputs = sources.filter((source) => sourceKind(source) === "input");
+    const managedApps = Array.isArray(attrs.managed_apps) ? attrs.managed_apps : [];
+    const appOptions = this._buildAppOptions(sourceApps, managedApps);
     const activities = Array.isArray(attrs.activity_names) ? attrs.activity_names.map(String).filter(Boolean) : [];
     const activeSource = String(attrs.source ?? "");
     const volume = Number.isFinite(Number(attrs.volume_level)) ? Math.round(Number(attrs.volume_level) * 100) : 0;
@@ -153,7 +156,7 @@ class UnifiedTvCard extends HTMLElement {
     const name = this._config.name || attrs.friendly_name || this._config.entity;
     const artwork = this._config.show_artwork !== false ? attrs.entity_picture : undefined;
     const health = String(attrs.health ?? (state.state === "unavailable" ? "unavailable" : "healthy"));
-    const favorites = this._favoriteSources(apps, attrs.favorite_sources);
+    const favorites = this._favoriteSources(sourceApps, attrs.favorite_sources);
 
     this.shadowRoot.innerHTML = `
       ${this._styles()}
@@ -167,7 +170,7 @@ class UnifiedTvCard extends HTMLElement {
           <div class="media-copy"><div class="media-title">${escapeHtml(title)}</div>${subtitle ? `<div class="media-subtitle">${escapeHtml(subtitle)}</div>` : ""}${activeSource ? `<div class="media-source">${escapeHtml(activeSource)}</div>` : ""}</div>
         </section>
         ${this._config.show_activities !== false && activities.length ? `<section class="activity-row">${this._selectBlock("activity-select", labels.activity, labels.selectActivity, activities, "", false)}</section>` : ""}
-        <section class="selectors">${this._selectBlock("app-select", labels.app, labels.selectApp, apps, activeSource)}${this._selectBlock("input-select", labels.input, labels.selectInput, inputs, activeSource)}</section>
+        <section class="selectors">${this._appSelectBlock(appOptions, activeSource, labels)}${this._selectBlock("input-select", labels.input, labels.selectInput, inputs, activeSource)}</section>
         ${this._config.show_favorites !== false && favorites.length ? `<section class="favorites">${favorites.map((source) => `<button class="favorite" data-source="${escapeAttribute(source)}">${escapeHtml(displaySource(source))}</button>`).join("")}</section>` : ""}
         <section class="transport">${this._iconButton("previous", "mdi:skip-previous", "Previous")}${this._iconButton("rewind", "mdi:rewind-10", `-${this._config.seek_seconds}s`)}${this._iconButton("play-pause", state.state === "playing" ? "mdi:pause" : "mdi:play", state.state === "playing" ? "Pause" : "Play", "primary big")}${this._iconButton("forward", "mdi:fast-forward-10", `+${this._config.seek_seconds}s`)}${this._iconButton("next", "mdi:skip-next", "Next")}</section>
         <section class="volume-row">
@@ -180,6 +183,31 @@ class UnifiedTvCard extends HTMLElement {
     this._bindEvents();
   }
 
+  _buildAppOptions(sourceApps, managedApps) {
+    this._appActions = new Map();
+    const options = [];
+    const labels = new Set();
+    sourceApps.forEach((source, index) => {
+      const id = `source-${index}`;
+      const label = displaySource(source);
+      labels.add(label.toLowerCase());
+      this._appActions.set(id, { kind: "source", source });
+      options.push({ id, label, source });
+    });
+    managedApps
+      .filter((item) => item && item.visible !== false && ["tv_app", "cast_app"].includes(String(item.kind)))
+      .sort((left, right) => Number(left.order ?? 1000) - Number(right.order ?? 1000))
+      .forEach((item, index) => {
+        const label = String(item.name ?? item.default_name ?? item.value ?? "").trim();
+        if (!label || labels.has(label.toLowerCase())) return;
+        const id = `managed-${index}`;
+        labels.add(label.toLowerCase());
+        this._appActions.set(id, { kind: String(item.kind), appId: String(item.value ?? "") });
+        options.push({ id, label, source: "" });
+      });
+    return options;
+  }
+
   _favoriteSources(apps, managedFavorites) {
     const configured = Array.isArray(this._config.favorites) ? this._config.favorites.map(String) : [];
     const backend = Array.isArray(managedFavorites) ? managedFavorites.map(String) : [];
@@ -187,6 +215,12 @@ class UnifiedTvCard extends HTMLElement {
     const available = preferred.filter((source) => apps.includes(source));
     const max = Math.max(0, Number(this._config.max_favorites ?? 6));
     return (available.length ? available : apps).slice(0, max);
+  }
+
+  _appSelectBlock(options, activeSource, labels) {
+    const disabled = options.length === 0 ? "disabled" : "";
+    const placeholder = options.length === 0 ? labels.noApps : labels.selectApp;
+    return `<label class="select-control app-control" for="app-select"><span>${escapeHtml(labels.app)}</span><select id="app-select" ${disabled}><option value="">${escapeHtml(placeholder)}</option>${options.map((option) => `<option value="${escapeAttribute(option.id)}" ${option.source === activeSource ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select></label>`;
   }
 
   _selectBlock(id, label, placeholder, options, activeSource, stripPrefix = true) {
@@ -224,10 +258,16 @@ class UnifiedTvCard extends HTMLElement {
     }));
     this.shadowRoot.querySelectorAll("[data-command]").forEach((button) => button.addEventListener("click", () => this._call("cast_attribute_sensors", "send_command", { entity_id: entityId, command: button.dataset.command })));
     this.shadowRoot.querySelectorAll("[data-source]").forEach((button) => button.addEventListener("click", () => this._selectSource(button.dataset.source)));
-    for (const id of ["app-select", "input-select"]) {
-      const select = this.shadowRoot.getElementById(id);
-      select?.addEventListener("change", () => { if (select.value) this._selectSource(select.value); });
-    }
+    const appSelect = this.shadowRoot.getElementById("app-select");
+    appSelect?.addEventListener("change", async () => {
+      const action = this._appActions.get(appSelect.value);
+      if (!action) return;
+      if (action.kind === "source") await this._selectSource(action.source);
+      if (action.kind === "tv_app") await this._call("cast_attribute_sensors", "launch_tv_app", { entity_id: entityId, app_id: action.appId });
+      if (action.kind === "cast_app") await this._call("cast_attribute_sensors", "launch_cast_app", { entity_id: entityId, app_id: action.appId });
+    });
+    const inputSelect = this.shadowRoot.getElementById("input-select");
+    inputSelect?.addEventListener("change", () => { if (inputSelect.value) this._selectSource(inputSelect.value); });
     const activity = this.shadowRoot.getElementById("activity-select");
     activity?.addEventListener("change", async () => {
       if (!activity.value) return;
@@ -251,7 +291,9 @@ class UnifiedTvCard extends HTMLElement {
 
   _styles() {
     return `<style>
-      :host{display:block}ha-card{overflow:hidden}.card{--utc-accent:var(--primary-color,#03a9f4);--utc-surface:color-mix(in srgb,var(--card-background-color) 92%,var(--utc-accent) 8%);padding:18px;display:grid;gap:16px}header{display:flex;align-items:center;justify-content:space-between;gap:12px}.identity{min-width:0}.title{font-size:1.2rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.state{display:flex;align-items:center;gap:6px;margin-top:3px;color:var(--secondary-text-color);text-transform:capitalize;font-size:.82rem}.dot{width:8px;height:8px;border-radius:50%;background:var(--success-color,#4caf50)}.health-degraded .dot{background:var(--warning-color,#ff9800)}.health-unavailable .dot,.is-off .dot{background:var(--disabled-text-color)}.header-actions,.transport,.remote-top{display:flex;align-items:center;justify-content:center;gap:8px}.icon-button{width:42px;height:42px;border-radius:50%;border:0;cursor:pointer;display:inline-grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);transition:transform .12s ease,background .12s ease}.icon-button:hover{transform:scale(1.05);background:var(--utc-surface)}.icon-button:active{transform:scale(.96)}.icon-button.primary{background:var(--utc-accent);color:var(--text-primary-color,white)}.icon-button.big{width:54px;height:54px}.icon-button.danger{color:var(--error-color,#f44336)}.icon-button.accent{color:var(--utc-accent)}.now-playing{display:grid;grid-template-columns:86px 1fr;gap:14px;align-items:center;min-width:0}.artwork{width:86px;height:86px;border-radius:14px;background-size:cover;background-position:center;background-color:var(--secondary-background-color)}.artwork.placeholder{display:grid;place-items:center;color:var(--secondary-text-color)}.artwork.placeholder ha-icon{--mdc-icon-size:38px}.media-copy{min-width:0}.media-title{font-weight:650;font-size:1.05rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.media-subtitle,.media-source{margin-top:4px;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.media-source{font-size:.78rem}.selectors{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.activity-row{display:grid}.select-control{display:grid;gap:5px;color:var(--secondary-text-color);font-size:.78rem}select{width:100%;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);font:inherit}.favorites{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}.favorite{flex:0 0 auto;border:1px solid var(--divider-color);border-radius:999px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:8px 12px;cursor:pointer}.transport{justify-content:space-evenly}.volume-row{display:grid;grid-template-columns:42px 1fr 48px;gap:10px;align-items:center}.mute.active{background:var(--utc-accent);color:var(--text-primary-color,white)}input[type=range]{width:100%;accent-color:var(--utc-accent)}.volume-value{text-align:right;font-variant-numeric:tabular-nums;color:var(--secondary-text-color)}.remote{display:grid;gap:12px;padding-top:2px}.dpad{display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);justify-content:center;gap:4px}.dpad .icon-button{width:48px;height:48px}.dpad .ok{background:var(--utc-accent);color:var(--text-primary-color,white)}.diagnostics{border-top:1px solid var(--divider-color);padding-top:12px}.diagnostics summary{cursor:pointer;color:var(--secondary-text-color)}.diagnostics dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 12px;font-size:.82rem}.diagnostics dt{color:var(--secondary-text-color)}.diagnostics dd{margin:0;overflow-wrap:anywhere}.error{padding:20px;color:var(--error-color)}@media(max-width:520px){.card{padding:14px}.selectors{grid-template-columns:1fr}.now-playing{grid-template-columns:68px 1fr}.artwork{width:68px;height:68px}.transport{gap:4px}.transport .icon-button{width:38px;height:38px}.transport .big{width:50px;height:50px}}
+      :host{display:block;min-width:0}ha-card{overflow:hidden;container-type:inline-size;container-name:unified-tv}.card{--utc-accent:var(--primary-color,#03a9f4);--utc-surface:color-mix(in srgb,var(--card-background-color) 92%,var(--utc-accent) 8%);padding:18px;display:grid;gap:16px;min-width:0;box-sizing:border-box}header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;min-width:0}.identity{min-width:0}.title{font-size:1.2rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.state{display:flex;align-items:center;gap:6px;margin-top:3px;color:var(--secondary-text-color);text-transform:capitalize;font-size:.82rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dot{width:8px;height:8px;border-radius:50%;background:var(--success-color,#4caf50);flex:0 0 auto}.health-degraded .dot{background:var(--warning-color,#ff9800)}.health-unavailable .dot,.is-off .dot{background:var(--disabled-text-color)}.header-actions,.remote-top{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}.icon-button{width:42px;height:42px;min-width:0;border-radius:50%;border:0;cursor:pointer;display:inline-grid;place-items:center;background:var(--secondary-background-color);color:var(--primary-text-color);transition:transform .12s ease,background .12s ease}.icon-button:hover{transform:scale(1.05);background:var(--utc-surface)}.icon-button:active{transform:scale(.96)}.icon-button.primary{background:var(--utc-accent);color:var(--text-primary-color,white)}.icon-button.big{width:54px;height:54px}.icon-button.danger{color:var(--error-color,#f44336)}.icon-button.accent{color:var(--utc-accent)}.now-playing{display:grid;grid-template-columns:86px minmax(0,1fr);gap:14px;align-items:center;min-width:0}.artwork{width:86px;height:86px;border-radius:14px;background-size:cover;background-position:center;background-color:var(--secondary-background-color)}.artwork.placeholder{display:grid;place-items:center;color:var(--secondary-text-color)}.artwork.placeholder ha-icon{--mdc-icon-size:38px}.media-copy{min-width:0}.media-title{font-weight:650;font-size:1.05rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.media-subtitle,.media-source{margin-top:4px;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.media-source{font-size:.78rem}.selectors{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));gap:10px;min-width:0}.activity-row{display:grid;min-width:0}.select-control{display:grid;gap:5px;color:var(--secondary-text-color);font-size:.78rem;min-width:0}select{width:100%;max-width:100%;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);font:inherit;box-sizing:border-box}.favorites{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin;min-width:0}.favorite{flex:0 0 auto;border:1px solid var(--divider-color);border-radius:999px;background:var(--secondary-background-color);color:var(--primary-text-color);padding:8px 12px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.transport{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:center;justify-items:center;gap:6px;min-width:0}.volume-row{display:grid;grid-template-columns:42px minmax(0,1fr) 48px;gap:10px;align-items:center;min-width:0}.mute.active{background:var(--utc-accent);color:var(--text-primary-color,white)}input[type=range]{width:100%;min-width:0;accent-color:var(--utc-accent)}.volume-value{text-align:right;font-variant-numeric:tabular-nums;color:var(--secondary-text-color)}.remote{display:grid;gap:12px;padding-top:2px;min-width:0}.dpad{display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);justify-content:center;gap:4px;max-width:100%}.dpad .icon-button{width:48px;height:48px}.dpad .ok{background:var(--utc-accent);color:var(--text-primary-color,white)}.diagnostics{border-top:1px solid var(--divider-color);padding-top:12px;min-width:0}.diagnostics summary{cursor:pointer;color:var(--secondary-text-color)}.diagnostics dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 12px;font-size:.82rem}.diagnostics dt{color:var(--secondary-text-color)}.diagnostics dd{margin:0;overflow-wrap:anywhere}.error{padding:20px;color:var(--error-color)}
+      @container unified-tv (max-width:520px){.card{padding:14px;gap:14px}.now-playing{grid-template-columns:68px minmax(0,1fr)}.artwork{width:68px;height:68px}.selectors{grid-template-columns:1fr}.transport{gap:4px}.transport .icon-button{width:38px;height:38px}.transport .big{width:48px;height:48px}.volume-row{grid-template-columns:38px minmax(0,1fr) 44px}}
+      @container unified-tv (max-width:360px){.card{padding:10px;gap:12px}header{gap:6px}.title{font-size:1.05rem}.header-actions{gap:4px}.header-actions .icon-button{width:36px;height:36px}.now-playing{grid-template-columns:52px minmax(0,1fr);gap:10px}.artwork{width:52px;height:52px;border-radius:10px}.artwork.placeholder ha-icon{--mdc-icon-size:28px}.media-title{font-size:.98rem}.transport .icon-button{width:34px;height:34px}.transport .big{width:44px;height:44px}.volume-row{grid-template-columns:34px minmax(0,1fr) 40px;gap:6px}.remote-top{gap:6px}.dpad{grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,44px)}.dpad .icon-button{width:44px;height:44px}}
     </style>`;
   }
 }
