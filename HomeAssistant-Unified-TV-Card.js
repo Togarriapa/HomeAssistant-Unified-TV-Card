@@ -61,6 +61,8 @@ class UnifiedTvCard extends HTMLElement {
     this._noticeTimer = undefined;
   }
 
+  disconnectedCallback() { clearTimeout(this._noticeTimer); }
+
   static getConfigForm() {
     return {
       schema: [
@@ -231,28 +233,35 @@ class UnifiedTvCard extends HTMLElement {
     this._appActions = new Map();
     const options = [];
     const keys = new Set();
+    const labelsByGroup = new Set();
     sourceApps.forEach((source, index) => {
       const kind = sourceKind(source);
       const id = `source-${index}`;
       const key = `${kind}:${source}`;
       if (keys.has(key)) return;
       keys.add(key);
+      const group = kind === "cast_app" ? labels.castApps : labels.tvApps;
+      const label = displaySource(source);
+      labelsByGroup.add(`${group}:${label.toLowerCase()}`);
       this._appActions.set(id, { kind: "source", source });
-      options.push({ id, label: displaySource(source), source, group: kind === "cast_app" ? labels.castApps : labels.tvApps });
+      options.push({ id, label, source, group });
     });
     managedApps
-      .filter((item) => item && item.visible !== false && ["tv_app", "adb_app", "cast_app"].includes(String(item.kind)))
+      .filter((item) => item && item.visible !== false && ["tv_app", "cast_app"].includes(String(item.kind)))
       .sort((left, right) => Number(left.order ?? 1000) - Number(right.order ?? 1000))
       .forEach((item, index) => {
         const kind = String(item.kind);
         const appId = String(item.value ?? "");
         const label = String(item.name ?? item.default_name ?? appId).trim();
+        const group = kind === "cast_app" ? labels.castApps : labels.tvApps;
         const key = `${kind}:${appId || label.toLowerCase()}`;
-        if (!label || keys.has(key)) return;
+        const labelKey = `${group}:${label.toLowerCase()}`;
+        if (!label || keys.has(key) || labelsByGroup.has(labelKey)) return;
         keys.add(key);
+        labelsByGroup.add(labelKey);
         const id = `managed-${index}`;
         this._appActions.set(id, { kind, appId });
-        options.push({ id, label, source: "", group: kind === "cast_app" ? labels.castApps : labels.tvApps });
+        options.push({ id, label, source: "", group });
       });
     return options;
   }
@@ -322,7 +331,7 @@ class UnifiedTvCard extends HTMLElement {
       const action = this._appActions.get(appSelect.value);
       if (!action) return;
       if (action.kind === "source") await this._selectSource(action.source);
-      if (["tv_app", "adb_app"].includes(action.kind)) await this._call("cast_attribute_sensors", "launch_tv_app", { entity_id: entityId, app_id: action.appId });
+      if (action.kind === "tv_app") await this._call("cast_attribute_sensors", "launch_tv_app", { entity_id: entityId, app_id: action.appId });
       if (action.kind === "cast_app") await this._call("cast_attribute_sensors", "launch_cast_app", { entity_id: entityId, app_id: action.appId });
     });
     const inputSelect = this.shadowRoot.getElementById("input-select");
