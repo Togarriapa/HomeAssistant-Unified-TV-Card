@@ -8,12 +8,14 @@ A compact, helper-free Home Assistant dashboard card designed for the controller
 
 - Dynamic application dropdown populated from the controller's live `source_list`
 - Separate physical-input dropdown
+- Dynamic activity selector populated from backend-configured activities
 - Mute control directly beside the volume slider
-- Power and restart
+- Backend-managed favourite applications and ordering
+- Optional card-level favourite override
+- Power and restart with optional confirmation
 - Playback, previous/next, and configurable relative seeking
 - Android/Google TV Home, Back, Settings, and directional pad
-- Current artwork, title, artist, application, and source
-- Automatically generated quick-app buttons
+- Current artwork, title, artist, application, source, and controller health
 - Optional diagnostics
 - Responsive phone, tablet, and desktop layout
 - Visual dashboard editor and card-picker registration
@@ -22,7 +24,7 @@ A compact, helper-free Home Assistant dashboard card designed for the controller
 ## Requirements
 
 - Home Assistant 2026.7 or newer
-- [Cast Metadata & TV Controls 7.0.0 or newer](https://github.com/Togarriapa/HomeAssistant-Cast-Metadata-Controls)
+- [Cast Metadata & TV Controls 7.2.0 or newer](https://github.com/Togarriapa/HomeAssistant-Cast-Metadata-Controls) for managed favourites and activities
 - HACS Dashboard support, or manual JavaScript resource installation
 
 ## HACS installation
@@ -58,24 +60,60 @@ show_artwork: true
 show_remote: true
 show_diagnostics: false
 show_favorites: true
+show_activities: true
+confirm_power_off: true
+confirm_restart: true
 seek_seconds: 10
 max_favorites: 6
+```
+
+## Managed favourites
+
+Configure applications in:
+
+**Settings → Devices & services → Cast Metadata & TV Controls → Configure → Manage applications**
+
+Applications marked as favourites appear automatically as quick buttons. Their backend-defined name, visibility, and order are also respected by the dropdown.
+
+A card-level override is still supported:
+
+```yaml
 favorites:
   - TV App · YouTube
   - TV App · Netflix
   - Cast · YouTube
 ```
 
-`favorites` values must exactly match options currently published in the controller's `source_list`. When no favourites are configured, the card shows the first available applications dynamically.
+Card-level favourites take priority over backend favourites. Values must exactly match options published in the controller's `source_list`.
 
 ## Dynamic dropdowns
 
-The card reads the controller's `source_list` on every Home Assistant state update:
+The card reads the controller on every Home Assistant state update:
 
 - `TV App · ...` and `Cast · ...` are placed in the **Application** dropdown.
 - `Input · ...` is placed in the **Input** dropdown.
+- `activity_names` creates the **Activity** dropdown.
 
-New applications and inputs therefore appear automatically without changing the dashboard configuration.
+New applications, inputs, and activities therefore appear automatically without changing dashboard YAML.
+
+## Activities
+
+Create activities under:
+
+**Settings → Devices & services → Cast Metadata & TV Controls → Configure → Add or replace an activity**
+
+An activity can power on the physical device, launch an app or input, set volume, and set mute. Selecting it in the card calls `cast_attribute_sensors.run_activity` locally.
+
+## Safety controls
+
+The card confirms power-off and restart by default:
+
+```yaml
+confirm_power_off: true
+confirm_restart: true
+```
+
+Set either option to `false` to perform that action immediately.
 
 ## Remote commands
 
