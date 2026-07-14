@@ -1,0 +1,51 @@
+name: Publish release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - HomeAssistant-Unified-TV-Card.js
+      - package.json
+      - CHANGELOG.md
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      - name: Publish version when missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Unified TV Card $VERSION"
+          git push origin "$TAG"
+          awk -v version="$VERSION" '
+            $0 == "## " version {flag=1; next}
+            /^## / && flag {exit}
+            flag
+          ' CHANGELOG.md > release-notes.md
+          gh release create "$TAG" \
+            HomeAssistant-Unified-TV-Card.js \
+            --title "Unified TV Card $VERSION" \
+            --notes-file release-notes.md \
+            --verify-tag
