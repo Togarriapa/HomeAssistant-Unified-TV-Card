@@ -2,6 +2,8 @@
 
 A compact, helper-free Home Assistant dashboard card designed for the controller entities created by [Cast Metadata & TV Controls](https://github.com/Togarriapa/HomeAssistant-Cast-Metadata-Controls).
 
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Togarriapa&repository=HomeAssistant-Unified-TV-Card&category=plugin)
+
 ## Features
 
 - Dynamic application dropdown populated from the controller's live `source_list`
@@ -24,6 +26,8 @@ A compact, helper-free Home Assistant dashboard card designed for the controller
 - HACS Dashboard support, or manual JavaScript resource installation
 
 ## HACS installation
+
+Use the **Open in HACS** button above, or add the repository manually:
 
 1. Open **HACS → Dashboard**.
 2. Open the three-dot menu and select **Custom repositories**.
