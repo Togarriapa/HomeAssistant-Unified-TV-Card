@@ -1,9 +1,9 @@
 {
   "name": "homeassistant-unified-tv-card",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Responsive unified TV, Cast, app, input, activity, ad-skip and remote control card for Home Assistant",
   "private": true,
   "scripts": {
-    "check": "node --check HomeAssistant-Unified-TV-Card.js"
+    "check": "node --check HomeAssistant-Unified-TV-Card.js && node tests/card_smoke.test.mjs"
   }
 }
