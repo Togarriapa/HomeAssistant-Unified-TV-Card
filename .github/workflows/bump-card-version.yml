@@ -1,0 +1,38 @@
+name: Apply card version bump
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Update bundle version and remove this temporary workflow
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('HomeAssistant-Unified-TV-Card.js')
+          content = path.read_text(encoding='utf-8')
+          old = 'const CARD_VERSION = "1.2.0";'
+          new = 'const CARD_VERSION = "1.2.1";'
+          if old not in content and new not in content:
+              raise SystemExit('Expected CARD_VERSION declaration was not found')
+          path.write_text(content.replace(old, new, 1), encoding='utf-8')
+          PY
+          rm .github/workflows/bump-card-version.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add HomeAssistant-Unified-TV-Card.js .github/workflows/bump-card-version.yml
+          git commit -m "Card 1.2.1: update bundle version and remove temporary workflow"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
