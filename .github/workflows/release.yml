@@ -8,7 +8,13 @@ on:
       - package.json
       - CHANGELOG.md
       - .github/workflows/release.yml
+  schedule:
+    - cron: "41 3 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: publish-unified-tv-card-release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -20,32 +26,69 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - id: version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify version consistency
+        id: version
         run: |
-          version="$(node -p "require('./package.json').version")"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
-      - name: Publish version when missing
+          node <<'JS' >> "$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const packageData = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const source = fs.readFileSync('HomeAssistant-Unified-TV-Card.js', 'utf8');
+          const sourceMatch = source.match(/^const CARD_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)";/m);
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const heading = changelog.match(/^## ([0-9]+\.[0-9]+\.[0-9]+)$/m);
+          if (!sourceMatch || !heading) throw new Error('Version metadata is incomplete');
+          const versions = new Set([packageData.version, sourceMatch[1], heading[1]]);
+          if (versions.size !== 1) {
+            throw new Error(`Version mismatch: ${[...versions].join(', ')}`);
+          }
+          console.log(`version=${packageData.version}`);
+          console.log(`tag=v${packageData.version}`);
+          JS
+
+      - name: Publish or repair GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          set -euo pipefail
+
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists."
+            echo "Release $TAG already exists; normalizing it as a full release."
+            gh release edit "$TAG" --draft=false --prerelease=false \
+              --title "Unified TV Card $VERSION"
+            gh release upload "$TAG" HomeAssistant-Unified-TV-Card.js --clobber
+            gh release view "$TAG" --json tagName,isDraft,isPrerelease,publishedAt
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Unified TV Card $VERSION"
-          git push origin "$TAG"
+
+          if ! git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            git tag -a "$TAG" -m "Unified TV Card $VERSION"
+            git push origin "$TAG"
+          fi
+
           awk -v version="$VERSION" '
             $0 == "## " version {flag=1; next}
             /^## / && flag {exit}
             flag
           ' CHANGELOG.md > release-notes.md
+
+          if [[ ! -s release-notes.md ]]; then
+            printf 'Unified TV Card %s\n' "$VERSION" > release-notes.md
+          fi
+
           gh release create "$TAG" \
             HomeAssistant-Unified-TV-Card.js \
+            --target "$GITHUB_SHA" \
             --title "Unified TV Card $VERSION" \
             --notes-file release-notes.md \
             --verify-tag
+
+          gh release view "$TAG" --json tagName,isDraft,isPrerelease,publishedAt
