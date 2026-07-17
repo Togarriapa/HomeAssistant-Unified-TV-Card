@@ -3,6 +3,9 @@ name: Validate
 on:
   push:
   pull_request:
+  schedule:
+    - cron: "30 0 * * 0"
+  workflow_dispatch:
 
 permissions: {}
 
@@ -22,5 +25,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: node --check HomeAssistant-Unified-TV-Card.js
-      - run: node -e "JSON.parse(require('fs').readFileSync('hacs.json')); JSON.parse(require('fs').readFileSync('package.json'))"
+      - run: npm run check
+      - name: Validate package, HACS metadata, and version consistency
+        run: |
+          node <<'JS'
+          const fs = require('fs');
+          const packageData = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          JSON.parse(fs.readFileSync('hacs.json', 'utf8'));
+          const source = fs.readFileSync('HomeAssistant-Unified-TV-Card.js', 'utf8');
+          const match = source.match(/^const CARD_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)";/m);
+          if (!match) throw new Error('CARD_VERSION was not found');
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const heading = changelog.match(/^## ([0-9]+\.[0-9]+\.[0-9]+)$/m);
+          if (!heading) throw new Error('CHANGELOG.md has no semantic-version heading');
+          const versions = new Set([packageData.version, match[1], heading[1]]);
+          if (versions.size !== 1) {
+            throw new Error(`Version mismatch: ${[...versions].join(', ')}`);
+          }
+          JS
