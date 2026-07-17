@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.1
+
+- Confirmed compatibility with Cast Metadata & TV Controls V8; the backend preserves the controller and metadata unique-ID namespace, so existing card configurations remain valid after physical-device merges.
+- Corrected the documented Home Assistant compatibility floor from 2026.7 to 2025.12.
+- Added a dependency-free frontend smoke test covering custom-element registration, required controller validation, and automatic controller suggestion.
+- Added CI validation that `package.json`, `CARD_VERSION`, and the changelog describe the same version.
+- Rebuilt the GitHub release workflow to create or repair a full non-draft release, refresh the downloadable JavaScript asset, verify publication, and perform a daily self-heal check so HACS reliably exposes updates.
+- Added V8 duplicate-device merge and update troubleshooting guidance.
+
 ## 1.2.0
 
 - Added automatic discovery of the backend's per-device `Auto-skip YouTube ads` switch.
@@ -18,21 +27,8 @@
 - Reworked responsiveness around CSS container queries so the card adapts to its actual dashboard column width instead of the browser viewport.
 - Added compact layouts for narrow tiles, including smaller artwork, controls, volume layout, and directional pad.
 - Made the application dropdown permanently visible.
-- Added a managed-application fallback when the controller temporarily exposes inputs but no application entries in `source_list`.
-- Added a dynamic activity selector sourced from the controller's configured `activity_names`.
-- Added automatic quick-app favourites from the backend-managed `favorite_sources` attribute.
-- Retained optional card-level favourites as an override.
-- Added controller health status to the header and diagnostics.
-- Added optional confirmation before power-off and restart actions.
-- Added visual-editor settings for activities and safety confirmations.
-- Kept the separate input dropdown and mute control beside the volume slider.
+- Added managed-application fallback, dynamic activities, backend-managed favourites, health status, and safety confirmations.
 
 ## 1.0.0
 
-- Initial HACS Dashboard release.
-- Added a dynamic application dropdown sourced from the controller entity.
-- Added a separate physical-input dropdown.
-- Added mute directly beside the volume slider.
-- Added power, restart, playback, previous/next, and relative-seek controls.
-- Added Android/Google TV Home, Back, Settings, and directional-pad commands.
-- Added artwork, metadata, quick applications, diagnostics, responsive styling, a visual editor, and Home Assistant card-picker registration.
+- Initial HACS Dashboard release with dynamic app/input selection, mute beside volume, playback, remote navigation, artwork, diagnostics, responsive styling, and visual-editor support.
