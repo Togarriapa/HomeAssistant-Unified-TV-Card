@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+
+- Added artwork fallback from the controller and every grouped source using both `entity_picture` and `media_image_url`.
+- Resolve Home Assistant-relative artwork URLs before rendering them in the card.
+- Consume the backend `remote_available` capability and replace guaranteed-failing remote buttons with a clear linked-remote warning.
+- Include the actual Home Assistant service error in inline action feedback.
+- Updated compatibility guidance for backend 8.2.0 remote, native-app, and artwork routing.
+
 ## 1.2.1
 
 - Confirmed compatibility with Cast Metadata & TV Controls V8; the backend preserves the controller and metadata unique-ID namespace, so existing card configurations remain valid after physical-device merges.

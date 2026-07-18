@@ -26,7 +26,7 @@ A responsive, helper-free Home Assistant dashboard card for controller entities 
 
 - Home Assistant 2025.12 or newer
 - Cast Metadata & TV Controls 7.4.0 or newer
-- Cast Metadata & TV Controls **8.0.0 is recommended** for authoritative duplicate-device merging and reliable HACS release metadata
+- Cast Metadata & TV Controls **8.2.0 is recommended** for authoritative duplicate-device merging and reliable HACS release metadata
 - HACS Dashboard support, or manual JavaScript resource installation
 
 ## HACS installation
@@ -148,7 +148,7 @@ The card uses CSS container queries, so it responds to its actual dashboard colu
 
 ## When an update does not appear
 
-HACS follows compatible full GitHub releases. Version 1.2.1 adds a self-healing release workflow and version-consistency checks.
+HACS follows compatible full GitHub releases. Version 1.3.0 retains the self-healing release workflow and version-consistency checks.
 
 1. Open **HACS → Dashboard → Unified TV Card**.
 2. Select **Update information**.
