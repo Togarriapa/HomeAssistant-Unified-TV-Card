@@ -79,6 +79,7 @@ jobs:
           if 'No navigation remote is linked' not in test:
               test_path.write_text(test.rstrip() + addition)
 
+          Path('.v131-trigger').unlink(missing_ok=True)
           Path('.github/workflows/apply-v131.yml').unlink()
           PY
       - name: Commit release files
