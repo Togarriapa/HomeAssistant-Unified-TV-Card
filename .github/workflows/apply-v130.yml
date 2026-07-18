@@ -1,0 +1,115 @@
+name: Apply reviewed v1.3 fixes
+
+on:
+  push:
+    branches:
+      - fix/v1.3.0-artwork-remote-feedback
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v1.3.0-artwork-remote-feedback
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Apply card fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          def replace(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              if old not in text:
+                  raise SystemExit(f"Expected block not found in {path}: {old[:100]!r}")
+              file.write_text(text.replace(old, new, 1))
+
+          js = "HomeAssistant-Unified-TV-Card.js"
+          replace(js, 'const CARD_VERSION = "1.2.1";', 'const CARD_VERSION = "1.3.0";')
+          replace(
+              js,
+              '    tvApps: "TV apps", castApps: "Cast apps",\n',
+              '    tvApps: "TV apps", castApps: "Cast apps",\n    remoteUnavailable: "Android TV Remote is not linked to this controller",\n',
+          )
+          replace(
+              js,
+              '    tvApps: "Aplicações da TV", castApps: "Aplicações Cast",\n',
+              '    tvApps: "Aplicações da TV", castApps: "Aplicações Cast",\n    remoteUnavailable: "O Android TV Remote não está associado a este controlador",\n',
+          )
+
+          replace(
+              js,
+              '''  _signatureFor(state, adEntityId, adState) {\n    if (!state || !this._config) return `${this._config?.entity ?? ""}:missing`;\n    const attrs = state.attributes ?? {};\n    return JSON.stringify([\n''',
+              '''  _resolveArtwork(value) {\n    const raw = String(value ?? "").trim();\n    if (!raw) return undefined;\n    if (/^(?:https?:)?\\/\\//i.test(raw) || raw.startsWith("data:")) return raw;\n    try { return this._hass?.hassUrl ? this._hass.hassUrl(raw) : raw; } catch (_error) { return raw; }\n  }\n\n  _artworkUrl(attrs) {\n    const sourceIds = Array.isArray(attrs?.source_entities) ? attrs.source_entities.map(String) : [];\n    const sourceStates = sourceIds.map((entityId) => this._hass?.states?.[entityId]).filter(Boolean);\n    const active = sourceStates.filter((candidate) => ["playing", "paused", "buffering"].includes(candidate.state));\n    const ordered = [...active, ...sourceStates.filter((candidate) => !active.includes(candidate))];\n    const candidates = [attrs?.entity_picture, attrs?.media_image_url];\n    ordered.forEach((candidate) => {\n      candidates.push(candidate.attributes?.entity_picture, candidate.attributes?.media_image_url);\n    });\n    return this._resolveArtwork(candidates.find((value) => String(value ?? "").trim()));\n  }\n\n  _signatureFor(state, adEntityId, adState) {\n    if (!state || !this._config) return `${this._config?.entity ?? ""}:missing`;\n    const attrs = state.attributes ?? {};\n    const sourceArtwork = (Array.isArray(attrs.source_entities) ? attrs.source_entities : []).map((entityId) => {\n      const source = this._hass?.states?.[entityId];\n      return [entityId, source?.state, source?.attributes?.entity_picture, source?.attributes?.media_image_url];\n    });\n    return JSON.stringify([\n''',
+          )
+
+          replace(
+              js,
+              '''      attrs.media_duration, attrs.entity_picture, attrs.supported_features,\n      adEntityId, adState?.state, adState?.attributes?.last_result,\n''',
+              '''      attrs.media_duration, attrs.entity_picture, attrs.media_image_url, attrs.supported_features,\n      attrs.remote_available, sourceArtwork,\n      adEntityId, adState?.state, adState?.attributes?.last_result,\n''',
+          )
+
+          replace(
+              js,
+              '''    const artwork = this._config.show_artwork !== false ? attrs.entity_picture : undefined;\n    const health = String(attrs.health ?? (state.state === "unavailable" ? "unavailable" : "healthy"));\n''',
+              '''    const artwork = this._config.show_artwork !== false ? this._artworkUrl(attrs) : undefined;\n    const health = String(attrs.health ?? (state.state === "unavailable" ? "unavailable" : "healthy"));\n    const remoteAvailable = attrs.remote_available !== false;\n''',
+          )
+
+          replace(
+              js,
+              '''        ${this._config.show_remote !== false ? `<section class="remote"><div class="remote-top">${this._commandButton("BACK", "mdi:arrow-left", labels.back)}${this._commandButton("HOME", "mdi:home", labels.home)}${this._commandButton("SETTINGS", "mdi:cog", "Settings")}</div><div class="dpad"><span></span>${this._commandButton("DPAD_UP", "mdi:chevron-up", "Up")}<span></span>${this._commandButton("DPAD_LEFT", "mdi:chevron-left", "Left")}${this._commandButton("DPAD_CENTER", "mdi:circle-outline", "OK", "ok")}${this._commandButton("DPAD_RIGHT", "mdi:chevron-right", "Right")}<span></span>${this._commandButton("DPAD_DOWN", "mdi:chevron-down", "Down")}<span></span></div></section>` : ""}\n''',
+              '''        ${this._config.show_remote !== false ? (remoteAvailable ? `<section class="remote"><div class="remote-top">${this._commandButton("BACK", "mdi:arrow-left", labels.back)}${this._commandButton("HOME", "mdi:home", labels.home)}${this._commandButton("SETTINGS", "mdi:cog", "Settings")}</div><div class="dpad"><span></span>${this._commandButton("DPAD_UP", "mdi:chevron-up", "Up")}<span></span>${this._commandButton("DPAD_LEFT", "mdi:chevron-left", "Left")}${this._commandButton("DPAD_CENTER", "mdi:circle-outline", "OK", "ok")}${this._commandButton("DPAD_RIGHT", "mdi:chevron-right", "Right")}<span></span>${this._commandButton("DPAD_DOWN", "mdi:chevron-down", "Down")}<span></span></div></section>` : `<section class="remote-unavailable"><ha-icon icon="mdi:remote-off"></ha-icon><span>${escapeHtml(labels.remoteUnavailable)}</span></section>`) : ""}\n''',
+          )
+
+          replace(
+              js,
+              '''    } catch (error) {\n      console.error(`[Unified TV Card] ${domain}.${service} failed`, error);\n      this._setNotice(`${this._labels().actionFailed}: ${domain}.${service}`, "error");\n      return false;\n''',
+              '''    } catch (error) {\n      console.error(`[Unified TV Card] ${domain}.${service} failed`, error);\n      const detail = String(error?.message ?? error?.body?.message ?? "").trim();\n      this._setNotice(`${this._labels().actionFailed}: ${domain}.${service}${detail ? ` — ${detail}` : ""}`, "error");\n      return false;\n''',
+          )
+
+          replace(
+              js,
+              '.notice.success{background:color-mix(in srgb,var(--success-color,#4caf50) 16%,transparent);color:var(--success-color,#4caf50)}.now-playing',
+              '.notice.success{background:color-mix(in srgb,var(--success-color,#4caf50) 16%,transparent);color:var(--success-color,#4caf50)}.remote-unavailable{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:12px;background:var(--secondary-background-color);color:var(--secondary-text-color);font-size:.82rem}.now-playing',
+          )
+
+          package = Path("package.json")
+          package_data = json.loads(package.read_text())
+          package_data["version"] = "1.3.0"
+          package.write_text(json.dumps(package_data, indent=2) + "\n")
+
+          changelog = Path("CHANGELOG.md")
+          changelog.write_text(changelog.read_text().replace(
+              "# Changelog\n\n",
+              "# Changelog\n\n## 1.3.0\n\n- Added artwork fallback from the controller and every grouped source using both `entity_picture` and `media_image_url`.\n- Resolve Home Assistant-relative artwork URLs before rendering them in the card.\n- Consume the backend `remote_available` capability and replace guaranteed-failing remote buttons with a clear linked-remote warning.\n- Include the actual Home Assistant service error in inline action feedback.\n- Updated compatibility guidance for backend 8.2.0 remote, native-app, and artwork routing.\n\n",
+              1,
+          ))
+
+          readme = Path("README.md")
+          text = readme.read_text()
+          text = text.replace("Cast Metadata & TV Controls **8.0.0 is recommended**", "Cast Metadata & TV Controls **8.2.0 is recommended**")
+          text = text.replace("Version 1.2.1 adds a self-healing release workflow", "Version 1.3.0 retains the self-healing release workflow")
+          readme.write_text(text)
+
+          test = Path("tests/card_smoke.test.mjs")
+          test.write_text(test.read_text() + '''\nconst artworkCard = new Card();\nartworkCard._hass = {\n  hassUrl: (path) => `https://home.example${path}`,\n  states: {\n    "media_player.cast_source": {\n      state: "playing",\n      attributes: { media_image_url: "/api/media_player_proxy/source" },\n    },\n  },\n};\nassert.equal(\n  artworkCard._artworkUrl({ source_entities: ["media_player.cast_source"] }),\n  "https://home.example/api/media_player_proxy/source",\n);\nassert.equal(artworkCard._resolveArtwork("https://images.example/cover.jpg"), "https://images.example/cover.jpg");\n''')
+
+          Path(".github/workflows/apply-v130.yml").unlink()
+          PY
+      - name: Validate card
+        run: npm run check
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Release v1.3.0: fix artwork and remote capability feedback"
+          git push origin HEAD:fix/v1.3.0-artwork-remote-feedback
