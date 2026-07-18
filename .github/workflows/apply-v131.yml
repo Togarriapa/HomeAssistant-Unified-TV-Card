@@ -1,0 +1,90 @@
+name: Apply Unified TV Card 1.3.1
+
+on:
+  push:
+    branches:
+      - release/v1.3.1-generic-providers
+    paths:
+      - .github/workflows/apply-v131.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v1.3.1-generic-providers
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply vendor-neutral provider UI
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          js_path = Path('HomeAssistant-Unified-TV-Card.js')
+          js = js_path.read_text()
+
+          replacements = {
+              'const CARD_VERSION = "1.3.0";': 'const CARD_VERSION = "1.3.1";',
+              'remoteUnavailable: "Android TV Remote is not linked to this controller",': 'remoteUnavailable: "No navigation remote is linked. Configure the physical-device entities in the integration settings.",\n    navigationProvider: "Navigation provider", linkedEntities: "Linked entities",',
+              'remoteUnavailable: "O Android TV Remote não está associado a este controlador",': 'remoteUnavailable: "Não existe um comando de navegação associado. Configure as entidades do dispositivo físico nas definições da integração.",\n    navigationProvider: "Fornecedor de navegação", linkedEntities: "Entidades associadas",',
+              'attrs.remote_available, sourceArtwork,': 'attrs.remote_available, attrs.navigation_provider, attrs.linked_entities,\n      attrs.entity_provider_routes, attrs.remote_command_map, sourceArtwork,',
+              '<dt>${escapeHtml(labels.features)}</dt><dd>${escapeHtml(attrs.supported_features ?? 0)}</dd>': '<dt>${escapeHtml(labels.navigationProvider)}</dt><dd>${escapeHtml(attrs.navigation_provider || "—")}</dd><dt>${escapeHtml(labels.linkedEntities)}</dt><dd>${escapeHtml(Array.isArray(attrs.linked_entities) && attrs.linked_entities.length ? attrs.linked_entities.join(", ") : "—")}</dd><dt>${escapeHtml(labels.features)}</dt><dd>${escapeHtml(attrs.supported_features ?? 0)}</dd>',
+          }
+          for old, new in replacements.items():
+              if old not in js:
+                  raise SystemExit(f'Missing JavaScript marker: {old}')
+              js = js.replace(old, new, 1)
+          js_path.write_text(js)
+
+          package_path = Path('package.json')
+          package = json.loads(package_path.read_text())
+          package['version'] = '1.3.1'
+          package_path.write_text(json.dumps(package, indent=2) + '\n')
+
+          changelog_path = Path('CHANGELOG.md')
+          changelog = changelog_path.read_text()
+          entry = '''## 1.3.1
+
+- Replaced Android-TV-specific remote wording with vendor-neutral navigation-provider status.
+- Added backend 8.3 physical-device provider diagnostics, including the selected navigation entity and configured linked entities.
+- Refreshes automatically when provider selection or the physical-device inventory changes.
+- Keeps existing card configuration and entity references fully compatible.
+
+'''
+          if '## 1.3.1\n' not in changelog:
+              changelog_path.write_text(changelog.replace('# Changelog\n\n', '# Changelog\n\n' + entry, 1))
+
+          readme_path = Path('README.md')
+          readme = readme_path.read_text()
+          readme = readme.replace(
+              'Cast Metadata & TV Controls **8.0.0 is recommended** for authoritative duplicate-device merging and reliable HACS release metadata',
+              'Cast Metadata & TV Controls **8.3.0 is recommended** for explicit physical-device entity setup and generic capability-provider routing',
+          )
+          readme = readme.replace(
+              '- Android/Google TV Home, Back, Settings, and directional pad',
+              '- Home, Back, Settings, and directional controls through the backend-selected navigation provider',
+          )
+          readme_path.write_text(readme)
+
+          test_path = Path('tests/card_smoke.test.mjs')
+          test = test_path.read_text()
+          addition = '''\nassert.match(code, /No navigation remote is linked/);\nassert.match(code, /navigation_provider/);\nassert.doesNotMatch(code, /Android TV Remote is not linked/);\n'''
+          if 'No navigation remote is linked' not in test:
+              test_path.write_text(test.rstrip() + addition)
+
+          Path('.github/workflows/apply-v131.yml').unlink()
+          PY
+      - name: Commit release files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Release v1.3.1 generic provider diagnostics'
+          git push origin HEAD:release/v1.3.1-generic-providers
