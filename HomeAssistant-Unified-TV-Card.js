@@ -1,4 +1,4 @@
-const CARD_VERSION = "1.3.2";
+const CARD_VERSION = "1.4.0";
 const CARD_TAG = "unified-tv-card";
 
 const LABELS = {
