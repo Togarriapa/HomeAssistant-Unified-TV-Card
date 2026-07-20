@@ -1,0 +1,36 @@
+name: Bump card runtime to 1.4
+
+on:
+  push:
+    branches:
+      - release/v1.4.0-backend-compatibility
+    paths:
+      - .github/workflows/bump-v140-runtime.yml
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v1.4.0-backend-compatibility
+      - name: Bump runtime marker
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('HomeAssistant-Unified-TV-Card.js')
+          source = path.read_text()
+          old = 'const CARD_VERSION = "1.3.2";'
+          if old not in source:
+              raise SystemExit('The 1.3.2 runtime marker is missing')
+          path.write_text(source.replace(old, 'const CARD_VERSION = "1.4.0";', 1))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add HomeAssistant-Unified-TV-Card.js
+          git commit -m 'Set Unified TV Card runtime version to 1.4.0'
+          git push origin HEAD:release/v1.4.0-backend-compatibility
