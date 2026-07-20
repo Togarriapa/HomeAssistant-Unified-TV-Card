@@ -7,6 +7,7 @@ on:
       - HomeAssistant-Unified-TV-Card.js
       - package.json
       - CHANGELOG.md
+      - hacs.json
       - .github/workflows/release.yml
   schedule:
     - cron: "41 3 * * *"
@@ -37,6 +38,7 @@ jobs:
           node <<'JS' >> "$GITHUB_OUTPUT"
           const fs = require('fs');
           const packageData = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const hacs = JSON.parse(fs.readFileSync('hacs.json', 'utf8'));
           const source = fs.readFileSync('HomeAssistant-Unified-TV-Card.js', 'utf8');
           const sourceMatch = source.match(/^const CARD_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)";/m);
           const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
@@ -46,8 +48,12 @@ jobs:
           if (versions.size !== 1) {
             throw new Error(`Version mismatch: ${[...versions].join(', ')}`);
           }
+          if (hacs.filename !== 'HomeAssistant-Unified-TV-Card.js') {
+            throw new Error(`Unexpected HACS filename: ${hacs.filename}`);
+          }
           console.log(`version=${packageData.version}`);
           console.log(`tag=v${packageData.version}`);
+          console.log(`asset=${hacs.filename}`);
           JS
 
       - name: Publish or repair GitHub release
@@ -55,22 +61,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
+          ASSET: ${{ steps.version.outputs.asset }}
         run: |
           set -euo pipefail
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; normalizing it as the latest full release."
-            gh release edit "$TAG" --draft=false --prerelease=false --latest \
-              --title "Unified TV Card $VERSION"
-            gh release upload "$TAG" HomeAssistant-Unified-TV-Card.js --clobber
-            gh release view "$TAG" \
-              --json tagName,isDraft,isPrerelease,isLatest,publishedAt
-            exit 0
-          fi
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           if ! git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
             git tag -a "$TAG" -m "Unified TV Card $VERSION"
             git push origin "$TAG"
@@ -81,18 +77,25 @@ jobs:
             /^## / && flag {exit}
             flag
           ' CHANGELOG.md > release-notes.md
-
           if [[ ! -s release-notes.md ]]; then
             printf 'Unified TV Card %s\n' "$VERSION" > release-notes.md
           fi
 
-          gh release create "$TAG" \
-            HomeAssistant-Unified-TV-Card.js \
-            --target "$GITHUB_SHA" \
-            --title "Unified TV Card $VERSION" \
-            --notes-file release-notes.md \
-            --verify-tag \
-            --latest
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --draft=false --prerelease=false --latest \
+              --title "Unified TV Card $VERSION"
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            gh release create "$TAG" "$ASSET" \
+              --target "$GITHUB_SHA" \
+              --title "Unified TV Card $VERSION" \
+              --notes-file release-notes.md \
+              --verify-tag \
+              --latest
+          fi
 
-          gh release view "$TAG" \
-            --json tagName,isDraft,isPrerelease,isLatest,publishedAt
+          test "$(gh release view "$TAG" --json assets --jq '.assets[] | select(.name == env.ASSET) | .name')" = "$ASSET"
+          rm -rf /tmp/card-release
+          mkdir -p /tmp/card-release
+          gh release download "$TAG" -p "$ASSET" -D /tmp/card-release --clobber
+          cmp "$ASSET" "/tmp/card-release/$ASSET"
