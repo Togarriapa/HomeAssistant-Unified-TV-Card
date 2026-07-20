@@ -1,0 +1,38 @@
+name: Apply v1.3.2 version marker
+
+on:
+  push:
+    branches:
+      - fix/v1.3.2-hacs-discovery
+    paths:
+      - .github/workflows/apply-v132-version.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/v1.3.2-hacs-discovery
+      - name: Update card version marker
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('HomeAssistant-Unified-TV-Card.js')
+          source = path.read_text()
+          old = 'const CARD_VERSION = "1.3.1";'
+          new = 'const CARD_VERSION = "1.3.2";'
+          if old not in source:
+              raise SystemExit('Expected 1.3.1 card version marker was not found')
+          path.write_text(source.replace(old, new, 1))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add HomeAssistant-Unified-TV-Card.js
+          git commit -m "Set Unified TV Card runtime version to 1.3.2"
+          git push origin HEAD:fix/v1.3.2-hacs-discovery
