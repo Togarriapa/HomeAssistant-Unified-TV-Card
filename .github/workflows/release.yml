@@ -28,6 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -56,22 +57,10 @@ jobs:
           console.log(`asset=${hacs.filename}`);
           JS
 
-      - name: Publish or repair GitHub release
+      - name: Build release notes
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
-          ASSET: ${{ steps.version.outputs.asset }}
         run: |
-          set -euo pipefail
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
-            git tag -a "$TAG" -m "Unified TV Card $VERSION"
-            git push origin "$TAG"
-          fi
-
           awk -v version="$VERSION" '
             $0 == "## " version {flag=1; next}
             /^## / && flag {exit}
@@ -81,20 +70,29 @@ jobs:
             printf 'Unified TV Card %s\n' "$VERSION" > release-notes.md
           fi
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --draft=false --prerelease=false --latest \
-              --title "Unified TV Card $VERSION"
-            gh release upload "$TAG" "$ASSET" --clobber
-          else
-            gh release create "$TAG" "$ASSET" \
-              --target "$GITHUB_SHA" \
-              --title "Unified TV Card $VERSION" \
-              --notes-file release-notes.md \
-              --verify-tag \
-              --latest
-          fi
+      - name: Create or repair latest GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Unified TV Card ${{ steps.version.outputs.version }}
+          body_path: release-notes.md
+          files: ${{ steps.version.outputs.asset }}
+          draft: false
+          prerelease: false
+          make_latest: true
+          fail_on_unmatched_files: true
 
-          test "$(gh release view "$TAG" --json assets --jq '.assets[] | select(.name == env.ASSET) | .name')" = "$ASSET"
+      - name: Verify published release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          ASSET: ${{ steps.version.outputs.asset }}
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$TAG" --json isDraft --jq '.isDraft')" = "false"
+          test "$(gh release view "$TAG" --json isPrerelease --jq '.isPrerelease')" = "false"
+          gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fx "$ASSET"
           rm -rf /tmp/card-release
           mkdir -p /tmp/card-release
           gh release download "$TAG" -p "$ASSET" -D /tmp/card-release --clobber
