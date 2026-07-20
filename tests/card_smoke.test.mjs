@@ -36,7 +36,7 @@ const Card = registry.get("unified-tv-card");
 assert.ok(Card, "custom element should be registered");
 assert.equal(sandbox.window.customCards.length, 1);
 assert.equal(sandbox.window.customCards[0].type, "unified-tv-card");
-assert.match(sandbox.window.customCards[0].description, /1\.3\.1/);
+assert.match(sandbox.window.customCards[0].description, /1\.3\.2/);
 
 assert.throws(
   () => new Card().setConfig({}),
@@ -139,5 +139,5 @@ assert.match(code, /remote_available === true/);
 assert.match(code, /generic_app/);
 assert.match(code, /navigation_provider/);
 assert.match(code, /restart_available/);
-assert.match(code, /const CARD_VERSION = "1\.3\.1"/);
+assert.match(code, /const CARD_VERSION = "1\.3\.2"/);
 assert.doesNotMatch(code, /Android TV Remote is not linked/);
