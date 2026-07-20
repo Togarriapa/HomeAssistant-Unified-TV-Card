@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2
+
+- Reissued the rebuilt card as a clean semantic-version transition so HACS cannot remain pinned to stale 1.3.1 release metadata.
+- Replaced shell-managed release creation with `softprops/action-gh-release` and made the configured JavaScript filename the authoritative release asset.
+- Added post-publication verification that the release is non-draft, non-prerelease and contains a byte-identical `HomeAssistant-Unified-TV-Card.js` asset.
+- Preserved all 1.3.1 card configuration, controls, diagnostics and YAML compatibility.
+
 ## 1.3.1
 
 - Rebuilt the card around backend capability attributes instead of rendering controls that are guaranteed to fail.
