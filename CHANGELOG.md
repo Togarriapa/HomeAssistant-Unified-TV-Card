@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0
+
+- Added an explicit compatibility warning when the selected controller is not running Cast Metadata & TV Controls 8.4.0 or newer.
+- Hid the manual ad action unless the backend confirms a configured manual provider.
+- Preserved existing YAML, visual-editor options, dynamic applications, inputs, transport, volume, remote controls, artwork, activities, and diagnostics.
+- Added frontend regression checks for backend compatibility and release versioning.
+
 ## 1.3.2
 
 - Reissued the rebuilt card as a clean semantic-version transition so HACS cannot remain pinned to stale 1.3.1 release metadata.

@@ -43,6 +43,7 @@ const LABELS = {
     applicationProviders: "Application providers",
     backendRelease: "Backend release",
     cardRelease: "Card release",
+    backendOutdated: "Backend 8.4.0 or newer is required. Installed backend: {version}.",
   },
   pt: {
     app: "Aplicação",
@@ -85,6 +86,7 @@ const LABELS = {
     applicationProviders: "Fornecedores de aplicações",
     backendRelease: "Versão da integração",
     cardRelease: "Versão do cartão",
+    backendOutdated: "É necessária a integração 8.4.0 ou superior. Versão instalada: {version}.",
   },
 };
 
@@ -114,6 +116,22 @@ function displaySource(value) {
     .replace(/^TV App · /, "")
     .replace(/^Cast · /, "")
     .replace(/^Input · /, "");
+}
+
+function versionAtLeast(value, minimum) {
+  const parse = (input) => String(input ?? "")
+    .replace(/^v/i, "")
+    .split(".")
+    .slice(0, 3)
+    .map((part) => Number.parseInt(part, 10));
+  const current = parse(value);
+  const required = parse(minimum);
+  if (current.length < 3 || current.some((part) => !Number.isFinite(part))) return false;
+  for (let index = 0; index < 3; index += 1) {
+    if (current[index] > required[index]) return true;
+    if (current[index] < required[index]) return false;
+  }
+  return true;
 }
 
 function cleanControllerTitle(value) {
@@ -526,6 +544,12 @@ class UnifiedTvCard extends HTMLElement {
     const restartAvailable = attrs.restart_available === true || Boolean(attrs.restart_provider);
     const favorites = this._favoriteSources(sourceApps, attrs.favorite_sources);
     const adEnabled = adState?.state === "on";
+    const backendRelease = String(attrs.runtime_release ?? "");
+    const backendCompatible = versionAtLeast(backendRelease, "8.4.0");
+    const backendWarning = backendCompatible
+      ? ""
+      : labels.backendOutdated.replace("{version}", backendRelease || "unknown");
+    const manualAdSkipAvailable = attrs.manual_ad_skip_available === true;
 
     const artworkHtml = this._config.show_artwork === false
       ? ""
@@ -556,6 +580,7 @@ class UnifiedTvCard extends HTMLElement {
               ${this._config.show_power !== false ? this._iconButton("power", "mdi:power", labels.power, isOff ? "accent" : "danger") : ""}
             </div>
           </header>
+          ${backendWarning ? `<div class="notice error">${escapeHtml(backendWarning)}</div>` : ""}
           ${this._notice ? `<div class="notice ${escapeAttribute(this._notice.type)}">${escapeHtml(this._notice.text)}</div>` : ""}
           <section class="now-playing ${this._config.show_artwork === false ? "without-artwork" : ""}">
             ${artworkHtml}
@@ -570,7 +595,7 @@ class UnifiedTvCard extends HTMLElement {
           ${this._config.show_favorites !== false && favorites.length ? `<section class="favorites">${favorites.map((source) => `<button class="favorite" data-source="${escapeAttribute(source)}">${escapeHtml(displaySource(source))}</button>`).join("")}</section>` : ""}
           ${this._config.show_transport !== false ? `<section class="transport">${this._iconButton("previous", "mdi:skip-previous", "Previous")}${this._iconButton("rewind", "mdi:rewind-10", `-${this._config.seek_seconds}s`)}${this._iconButton("play-pause", state.state === "playing" ? "mdi:pause" : "mdi:play", state.state === "playing" ? "Pause" : "Play", "primary big")}${this._iconButton("forward", "mdi:fast-forward-10", `+${this._config.seek_seconds}s`)}${this._iconButton("next", "mdi:skip-next", "Next")}</section>` : ""}
           ${this._config.show_volume !== false ? `<section class="volume-row"><button class="icon-button mute ${muted ? "active" : ""}" data-action="mute" title="${escapeAttribute(muted ? labels.unmute : labels.mute)}" aria-label="${escapeAttribute(muted ? labels.unmute : labels.mute)}"><ha-icon icon="${muted ? "mdi:volume-off" : volume > 55 ? "mdi:volume-high" : "mdi:volume-medium"}"></ha-icon></button><input id="volume" type="range" min="0" max="100" step="1" value="${volume}" aria-label="${escapeAttribute(labels.volume)}" /><span class="volume-value">${volume}%</span></section>` : ""}
-          ${adState ? `<section class="ad-skip-row"><button class="feature-toggle ${adEnabled ? "active" : ""}" data-action="toggle-ad-skip" aria-pressed="${adEnabled}" title="${escapeAttribute(labels.autoSkipAds)}"><ha-icon icon="mdi:advertisements-off"></ha-icon><span>${escapeHtml(labels.autoSkipAds)}</span><strong>${escapeHtml(adEnabled ? labels.on : labels.off)}</strong></button><button class="small-action" data-action="skip-ad-now"><ha-icon icon="mdi:skip-forward"></ha-icon><span>${escapeHtml(labels.skipNow)}</span></button></section>` : ""}
+          ${adState ? `<section class="ad-skip-row"><button class="feature-toggle ${adEnabled ? "active" : ""}" data-action="toggle-ad-skip" aria-pressed="${adEnabled}" title="${escapeAttribute(labels.autoSkipAds)}"><ha-icon icon="mdi:advertisements-off"></ha-icon><span>${escapeHtml(labels.autoSkipAds)}</span><strong>${escapeHtml(adEnabled ? labels.on : labels.off)}</strong></button>${manualAdSkipAvailable ? `<button class="small-action" data-action="skip-ad-now"><ha-icon icon="mdi:skip-forward"></ha-icon><span>${escapeHtml(labels.skipNow)}</span></button>` : ""}</section>` : ""}
           ${this._config.show_remote !== false ? (remoteAvailable ? `<section class="remote"><div class="remote-top">${this._commandButton("BACK", "mdi:arrow-left", labels.back)}${this._commandButton("HOME", "mdi:home", labels.home)}${this._commandButton("SETTINGS", "mdi:cog", labels.settings)}</div><div class="dpad"><span></span>${this._commandButton("DPAD_UP", "mdi:chevron-up", "Up")}<span></span>${this._commandButton("DPAD_LEFT", "mdi:chevron-left", "Left")}${this._commandButton("DPAD_CENTER", "mdi:circle-outline", "OK", "ok")}${this._commandButton("DPAD_RIGHT", "mdi:chevron-right", "Right")}<span></span>${this._commandButton("DPAD_DOWN", "mdi:chevron-down", "Down")}<span></span></div></section>` : `<section class="remote-unavailable"><ha-icon icon="mdi:remote-off"></ha-icon><span>${escapeHtml(labels.remoteUnavailable)}</span></section>`) : ""}
           ${this._config.show_diagnostics ? `<details class="diagnostics"><summary>${escapeHtml(labels.diagnostics)}</summary><dl><dt>${escapeHtml(labels.state)}</dt><dd>${escapeHtml(state.state)}</dd><dt>${escapeHtml(labels.health)}</dt><dd>${escapeHtml(health)}</dd><dt>${escapeHtml(labels.application)}</dt><dd>${escapeHtml(attrs.app_name || attrs.app_id || "—")}</dd><dt>${escapeHtml(labels.source)}</dt><dd>${escapeHtml(activeSource || "—")}</dd><dt>${escapeHtml(labels.volume)}</dt><dd>${volume}%${muted ? " · muted" : ""}</dd>${adState ? `<dt>${escapeHtml(labels.autoSkipAds)}</dt><dd>${escapeHtml(adEnabled ? labels.on : labels.off)}</dd><dt>${escapeHtml(labels.adResult)}</dt><dd>${escapeHtml(adState.attributes?.last_result || "—")}</dd>` : ""}<dt>${escapeHtml(labels.navigationProvider)}</dt><dd>${escapeHtml(attrs.navigation_provider || "—")}</dd><dt>${escapeHtml(labels.restartProvider)}</dt><dd>${escapeHtml(attrs.restart_provider || "—")}</dd><dt>${escapeHtml(labels.linkedEntities)}</dt><dd>${escapeHtml(Array.isArray(attrs.linked_entities) && attrs.linked_entities.length ? attrs.linked_entities.join(", ") : "—")}</dd><dt>${escapeHtml(labels.applicationProviders)}</dt><dd>${escapeHtml(Array.isArray(attrs.application_providers) && attrs.application_providers.length ? attrs.application_providers.join(", ") : "—")}</dd><dt>${escapeHtml(labels.backendRelease)}</dt><dd>${escapeHtml(attrs.runtime_release || "—")}</dd><dt>${escapeHtml(labels.cardRelease)}</dt><dd>${escapeHtml(CARD_VERSION)}</dd><dt>${escapeHtml(labels.features)}</dt><dd>${escapeHtml(attrs.supported_features ?? 0)}</dd></dl></details>` : ""}
         </div>
