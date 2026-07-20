@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.1
+
+- Rebuilt the card around backend capability attributes instead of rendering controls that are guaranteed to fail.
+- Added working visual-editor controls for applications, inputs, transport, volume, power and restart.
+- Fixed `show_artwork: false` so the artwork block is removed rather than replaced by a placeholder.
+- Added support for backend generic native application kinds and routed them through the generic application service.
+- Rendered the directional remote only when the backend confirms a navigation provider.
+- Added navigation, restart, linked-entity, application-provider and backend/card version diagnostics.
+- Preserved the existing YAML options and defaults while improving narrow-card responsiveness.
+- Hardened the HACS release workflow to verify the exact JavaScript asset after upload.
+
 ## 1.3.0
 
 - Added artwork fallback from the controller and every grouped source using both `entity_picture` and `media_image_url`.
